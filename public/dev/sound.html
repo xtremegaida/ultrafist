@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UltraFist - Sound Board</title>
+<style>
+  :root { --bg: #f4efe4; --ink: #1d1a17; --red: #b3261e; --mute: #8a8173; --card: #fffaf0; --line: #d9cfbd; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+  header { position: sticky; top: 0; z-index: 2; display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+    padding: 10px 20px; background: var(--ink); color: var(--bg); }
+  header h1 { margin: 0; font-size: 18px; letter-spacing: 1px; }
+  header h1 b { color: #ff6b5e; }
+  #status { font: 12px ui-monospace, monospace; opacity: 0.85; }
+  main { padding: 16px 20px 40px; display: grid; gap: 16px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--red); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+  button { font: inherit; padding: 7px 8px; border: 1px solid var(--line); border-radius: 5px; background: #fff;
+    color: var(--ink); cursor: pointer; text-align: left; }
+  button:hover { border-color: var(--ink); }
+  button:active, button.on { background: var(--ink); color: var(--bg); }
+  button.flash { background: var(--red); color: #fff; border-color: var(--red); }
+  #unlock { background: var(--red); color: #fff; border: 0; padding: 8px 16px; font-weight: 600; }
+  #unlock.done { background: #3c7a3c; }
+  .row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 8px; }
+  label { display: inline-flex; gap: 6px; align-items: center; color: var(--mute); }
+  label output { color: var(--ink); font: 12px ui-monospace, monospace; min-width: 32px; }
+  input[type=range] { width: 130px; accent-color: var(--red); }
+  input[type=text] { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; width: 280px; }
+  select { font: inherit; padding: 5px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
+  .hint { color: var(--mute); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ULTRA<b>FIST</b> sound board</h1>
+  <button id="unlock">Click to unlock audio</button>
+  <label style="color:inherit"><input type="checkbox" id="slowmo"> Slow-mo (0.25)</label>
+  <span id="status">locked</span>
+</header>
+<main>
+  <section>
+    <h2>Mix</h2>
+    <div class="row" id="vols"></div>
+    <div class="row">
+      <label>sfx pitch <input type="range" id="sfxPitch" min="0.5" max="2" step="0.05" value="1"><output>1</output></label>
+      <label>sfx pan <input type="range" id="sfxPan" min="-1" max="1" step="0.1" value="0"><output>0</output></label>
+      <label>combo tier <input type="range" id="tier" min="1" max="10" step="1" value="3"><output>3</output></label>
+      <button id="spam">Combo spam test (hit x40)</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>SFX</h2>
+    <div class="grid" id="sfx"></div>
+  </section>
+
+  <div class="two">
+    <section>
+      <h2>Animals</h2>
+      <div class="grid" id="animals"></div>
+    </section>
+    <section>
+      <h2>Music</h2>
+      <div class="grid" id="tracks"></div>
+      <div class="row">
+        <label>intensity <input type="range" id="intensity" min="0" max="1" step="0.01" value="0"><output>0</output></label>
+      </div>
+    </section>
+  </div>
+
+  <section>
+    <h2>Speech</h2>
+    <div class="row">
+      <input type="text" id="sayText" value="Thousand Hand Rooster Fist!" maxlength="80">
+      <select id="sayPrio"><option value="shout">shout</option><option value="announcer">announcer</option></select>
+      <select id="saySide"><option value="0">side 0</option><option value="1">side 1</option><option value="">no side</option></select>
+      <button id="say">Say</button>
+      <button id="sayCancel">Cancel</button>
+      <label><input type="checkbox" id="sayOn" checked> enabled</label>
+    </div>
+    <div class="row">
+      <label>pitch <input type="range" id="sayPitch" min="0" max="2" step="0.05" value="1"><output>1</output></label>
+      <label>rate <input type="range" id="sayRate" min="0.1" max="2.5" step="0.05" value="1"><output>1</output></label>
+      <label>volume <input type="range" id="sayVol" min="0" max="1" step="0.05" value="1"><output>1</output></label>
+      <span class="hint" id="sayInfo"></span>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+  import { audio } from '../js/audio/audio.js';
+
+  const $ = (id) => document.getElementById(id);
+  const num = (id) => parseFloat($(id).value);
+
+  // range inputs mirror their value into the sibling <output>
+  function bindRange(input, fn) {
+    const out = input.parentElement.querySelector('output');
+    const upd = () => { if (out) out.textContent = input.value; if (fn) fn(parseFloat(input.value)); };
+    input.addEventListener('input', upd);
+    upd();
+  }
+
+  function flash(btn) {
+    btn.classList.add('flash');
+    setTimeout(() => btn.classList.remove('flash'), 120);
+  }
+
+  audio.init();
+
+  $('unlock').addEventListener('click', () => {
+    audio.unlock();
+    setTimeout(refresh, 50);
+  });
+
+  // volumes
+  for (const bus of ['master', 'music', 'sfx', 'voice']) {
+    const label = document.createElement('label');
+    label.innerHTML = `${bus} <input type="range" min="0" max="1" step="0.01" value="${audio.getVolume(bus)}"><output></output>`;
+    $('vols').appendChild(label);
+    bindRange(label.querySelector('input'), (v) => audio.setVolume(bus, v));
+  }
+  bindRange($('sfxPitch'));
+  bindRange($('sfxPan'));
+  bindRange($('tier'));
+
+  const sfxOpts = () => ({ pitch: num('sfxPitch'), pan: num('sfxPan'), tier: num('tier') });
+
+  for (const name of audio.sfxNames) {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.addEventListener('click', () => { audio.unlock(); audio.sfx(name, sfxOpts()); flash(b); });
+    $('sfx').appendChild(b);
+  }
+
+  for (const kind of audio.animalNames) {
+    const b = document.createElement('button');
+    b.textContent = kind;
+    b.addEventListener('click', () => { audio.unlock(); audio.animal(kind, sfxOpts()); flash(b); });
+    $('animals').appendChild(b);
+  }
+
+  const trackBtns = [];
+  for (const id of [...audio.trackIds, 'stop']) {
+    const b = document.createElement('button');
+    b.textContent = id === 'stop' ? '■ stop' : id;
+    b.addEventListener('click', () => {
+      audio.unlock();
+      if (id === 'stop') audio.music.stop(); else audio.music.play(id);
+      setTimeout(refresh, 30);
+    });
+    b.dataset.track = id;
+    trackBtns.push(b);
+    $('tracks').appendChild(b);
+  }
+  bindRange($('intensity'), (v) => audio.music.setIntensity(v));
+
+  $('slowmo').addEventListener('change', (e) => audio.setSlowmo(e.target.checked ? 0.25 : 1));
+
+  // rapid-fire test: 40 hits at ~60 fps with combo tiers sprinkled in
+  $('spam').addEventListener('click', () => {
+    audio.unlock();
+    let i = 0;
+    const names = ['hitLight', 'hitLight', 'hitHeavy', 'swingLight', 'hitSpecial'];
+    const iv = setInterval(() => {
+      audio.sfx(names[i % names.length], { pan: Math.sin(i) * 0.6 });
+      if (i % 8 === 7) audio.sfx('comboTier', { tier: 1 + (i >> 3) * 2 });
+      if (++i >= 40) clearInterval(iv);
+    }, 16);
+  });
+
+  // speech
+  bindRange($('sayPitch'));
+  bindRange($('sayRate'));
+  bindRange($('sayVol'));
+  $('say').addEventListener('click', () => {
+    const side = $('saySide').value;
+    audio.speech.say($('sayText').value, {
+      pitch: num('sayPitch'), rate: num('sayRate'), volume: num('sayVol'),
+      side: side === '' ? null : Number(side), priority: $('sayPrio').value,
+    });
+  });
+  $('sayText').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('say').click(); });
+  $('sayCancel').addEventListener('click', () => audio.speech.cancel());
+  $('sayOn').addEventListener('change', (e) => { audio.speech.enabled = e.target.checked; });
+
+  function refresh() {
+    const ready = audio.ready;
+    $('unlock').textContent = ready ? 'Audio unlocked' : audio.available ? 'Click to unlock audio' : 'Web Audio unavailable';
+    $('unlock').classList.toggle('done', ready);
+    const st = audio.music.stats;
+    $('status').textContent = `ready=${ready}  sfx voices=${audio.activeVoices}/24  music=${audio.music.current || '-'}`
+      + `  music voices=${st.voices} dropped=${st.dropped}  slowmo=${audio.slowmo}`;
+    for (const b of trackBtns) b.classList.toggle('on', b.dataset.track === audio.music.current);
+    $('sayInfo').textContent = audio.speech.available
+      ? `voice: ${audio.speech.voiceName || 'default'}` : 'speechSynthesis unavailable (or voices still loading)';
+  }
+  setInterval(refresh, 250);
+  refresh();
+</script>
+</body>
+</html>

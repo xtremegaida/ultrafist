@@ -8,7 +8,7 @@ import { STAGES } from '../data/stages.js';
 import { audio } from '../audio/audio.js';
 import * as FX from '../render/fx.js';
 import { addShake } from '../render/camera.js';
-import { triggerFlip, triggerFlash } from '../render/renderer.js';
+import { triggerFlip, triggerFlash, triggerTear } from '../render/renderer.js';
 import { INK, SEAL, GOLD } from '../render/brush.js';
 import { VIEW_W } from '../render/camera.js';
 
@@ -85,6 +85,19 @@ function handle(d, r, v, e, fx, cam, cosOf) {
           if (cry) d.pending.push({ at: d.frame + 55 + side * 30, fn: () => say(cry, side, F(side)) });
         }
       }
+      break;
+    }
+    case 'stageChange': {
+      // smashed through the scenery: the old arena rips apart to reveal the area behind it
+      const def = STAGES[e.id];
+      triggerTear(r);
+      fx.decals.length = 0;
+      audio.sfx('wallBounce');
+      audio.sfx('scroll');
+      d.pending.push({ at: d.frame + 16, fn: () => {
+        audio.sfx('gong');
+        FX.banner(fx, def.glyph, VIEW_W / 2, 540, 70, SEAL, 84, { sub: def.name.toUpperCase() });
+      } });
       break;
     }
     case 'fight':

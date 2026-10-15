@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UltraFist - Animation Viewer</title>
+<style>
+  :root { --bg: #f4efe4; --ink: #1d1a17; --red: #b3261e; --mute: #8a8173; --card: #fffaf0; --line: #d9cfbd; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; font: 13px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--ink);
+    display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
+  header { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 8px 16px; background: var(--ink); color: var(--bg); }
+  header h1 { margin: 0; font-size: 17px; letter-spacing: 1px; }
+  header h1 b { color: #ff6b5e; }
+  header .hint { color: #bdb3a2; font-size: 12px; }
+  main { display: grid; grid-template-columns: 250px 1fr 360px; gap: 10px; padding: 10px; min-height: 0; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px; min-height: 0; }
+  h2 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--red); }
+  select, button, input { font: inherit; }
+  select { padding: 4px; width: 100%; }
+  button { padding: 4px 9px; border: 1px solid var(--line); border-radius: 5px; background: #fff; color: var(--ink); cursor: pointer; }
+  button:hover { border-color: var(--ink); }
+  button.on { background: var(--ink); color: var(--bg); }
+  #side { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+  #clips { overflow-y: auto; flex: 1; border-top: 1px solid var(--line); padding-top: 6px; }
+  #clips .grp { margin: 8px 0 3px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--mute); }
+  #clips .clip { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 3px 6px; border-radius: 4px; }
+  #clips .clip:hover { background: #efe6d4; }
+  #clips .clip.sel { background: var(--ink); color: var(--bg); }
+  #clips .clip small { color: var(--mute); }
+  #clips .clip.sel small { color: #bdb3a2; }
+  #center { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  #view { width: 100%; flex: 1; min-height: 200px; background: #f3ead7; border: 1px solid var(--line); border-radius: 8px; display: block; }
+  #tl { width: 100%; height: 96px; display: block; cursor: pointer; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .row label { display: inline-flex; gap: 4px; align-items: center; color: var(--mute); }
+  #frameLbl { font: 600 13px ui-monospace, Consolas, monospace; min-width: 260px; }
+  #info { overflow-y: auto; }
+  #info table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  #info td, #info th { border-bottom: 1px solid var(--line); padding: 2px 4px; text-align: left; vertical-align: top; }
+  #info th { color: var(--mute); font-weight: 600; }
+  .kv { display: grid; grid-template-columns: 110px 1fr; gap: 1px 8px; }
+  .kv span:nth-child(odd) { color: var(--mute); }
+  .now { background: #fff3c4; border-radius: 6px; padding: 6px; margin: 6px 0; font: 12px ui-monospace, Consolas, monospace; white-space: pre-wrap; }
+  pre { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 6px; font: 11px ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-all; margin: 4px 0; }
+  .lab input[type=range] { width: 150px; }
+  .lab label { display: grid; grid-template-columns: 54px 150px 44px; align-items: center; gap: 4px; color: var(--mute); }
+  .lab output { font: 11px ui-monospace, monospace; color: var(--ink); }
+  .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--mute); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 3px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ULTRA<b>FIST</b> animation viewer</h1>
+  <span class="hint">← → step · Space play · ↑ ↓ clip · F flip · O onion skin · J joints · Home / End</span>
+</header>
+<main>
+  <section id="side">
+    <div><h2>Fighter</h2><select id="char"></select></div>
+    <div><h2>Build</h2><select id="build"></select></div>
+    <div class="row">
+      <label><input type="checkbox" id="awake"> Awakened</label>
+      <label id="youthWrap"><input type="checkbox" id="youth"> Youth</label>
+      <label id="drunkWrap">Drunk <input type="number" id="drunk" min="0" max="5" value="0" style="width:44px"></label>
+    </div>
+    <div id="clips"></div>
+  </section>
+  <section id="center">
+    <canvas id="view" width="1100" height="620"></canvas>
+    <canvas id="tl" width="1100" height="96"></canvas>
+    <div class="row">
+      <button id="first" title="First frame (Home)">⏮</button>
+      <button id="prev" title="Previous frame (←)">◀</button>
+      <button id="play" title="Play / pause (Space)">▶ Play</button>
+      <button id="next" title="Next frame (→)">▶</button>
+      <button id="last" title="Last frame (End)">⏭</button>
+      <label>speed <select id="speed" style="width:auto"><option value="1">1×</option><option value="0.5">½×</option><option value="0.25" selected>¼×</option><option value="0.125">⅛×</option></select></label>
+      <label><input type="checkbox" id="loop" checked> loop</label>
+      <span id="frameLbl"></span>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="showHurt" checked> hurtboxes</label>
+      <label><input type="checkbox" id="showHit" checked> hitboxes</label>
+      <label><input type="checkbox" id="showPush"> pushbox</label>
+      <label><input type="checkbox" id="showProj" checked> projectile spawns</label>
+      <label><input type="checkbox" id="showJoints"> joints</label>
+      <label><input type="checkbox" id="onion"> onion skin</label>
+      <label><input type="checkbox" id="flip"> face left</label>
+      <label>zoom <input type="range" id="zoom" min="0.4" max="2.5" step="0.05" value="1" style="width:90px"></label>
+    </div>
+    <div class="legend">
+      <span><i style="background:#5aa469"></i>startup</span><span><i style="background:#d62828"></i>active</span>
+      <span><i style="background:#f4a3a3"></i>between hits</span><span><i style="background:#3a86ff"></i>recovery</span>
+      <span><i style="background:#9b5de5"></i>invulnerable</span><span><i style="background:#f8961e"></i>armor</span>
+      <span><i style="background:#2a9d8f"></i>parry</span><span>▲ projectile</span>
+    </div>
+  </section>
+  <section id="info"></section>
+</main>
+<script type="module" src="./anim.js"></script>
+</body>
+</html>

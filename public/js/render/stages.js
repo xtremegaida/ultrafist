@@ -2,8 +2,9 @@
 
 import { makeCanvas, rng, paperTexture, brushStroke, limb, circle, ellipse, poly, smoothBlob, INK, SEAL, GOLD, rgba, shade, brushText, puffSprite } from './brush.js';
 import { VIEW_W, VIEW_H, camScale, BASE_SCALE } from './camera.js';
+import { LW, mountains, skyGradient } from './scenery.js';
+import { AREA_PAINTERS, AREA_FLOORS, drawAreaFloor, drawAreaLive } from './areas.js';
 
-const LW = 2600; // prebaked layer width
 const cache = {};
 
 function layer(id, idx, painter) {
@@ -14,41 +15,6 @@ function layer(id, idx, painter) {
     cache[key] = c;
   }
   return cache[key];
-}
-
-function mountains(g, r, baseY, height, color, count, alpha = 1) {
-  g.save();
-  g.globalAlpha = alpha;
-  g.fillStyle = color;
-  g.beginPath();
-  g.moveTo(0, VIEW_H);
-  let x = 0;
-  g.lineTo(0, baseY);
-  while (x < LW) {
-    const w = LW / count * (0.6 + r() * 0.8);
-    const h = height * (0.5 + r() * 0.6);
-    g.quadraticCurveTo(x + w * 0.3, baseY - h * 0.9, x + w * 0.5, baseY - h);
-    g.quadraticCurveTo(x + w * 0.7, baseY - h * 0.85, x + w, baseY - r() * height * 0.2);
-    x += w;
-  }
-  g.lineTo(LW, VIEW_H);
-  g.closePath();
-  g.fill();
-  // misty base fade
-  const grad = g.createLinearGradient(0, baseY - height * 0.3, 0, baseY + 40);
-  grad.addColorStop(0, 'rgba(243,234,215,0)');
-  grad.addColorStop(1, 'rgba(243,234,215,0.85)');
-  g.fillStyle = grad;
-  g.fillRect(0, baseY - height * 0.3, LW, height * 0.3 + 60);
-  g.restore();
-}
-
-function skyGradient(g, top, bottom) {
-  const grad = g.createLinearGradient(0, 0, 0, VIEW_H);
-  grad.addColorStop(0, top);
-  grad.addColorStop(1, bottom);
-  g.fillStyle = grad;
-  g.fillRect(0, 0, LW, VIEW_H);
 }
 
 function bambooStalk(g, x, y0, y1, w, color, r) {
@@ -268,6 +234,8 @@ const PAINTERS = {
   ],
 };
 
+Object.assign(PAINTERS, AREA_PAINTERS);
+
 const PARALLAX = [0.2, 0.5, 0.8];
 const FLOOR = {
   bamboo: { top: '#8c7b5d', bottom: '#5b4a33', line: '#3a2e1f' },
@@ -280,28 +248,35 @@ const FLOOR = {
 
 let paper = null;
 
-export function drawBackground(ctx, cam, stageId, t) {
+// extras: animated background touches (drifting leaves, clouds, spray); off at low quality.
+export function drawBackground(ctx, cam, stageId, t, extras = true) {
   const painters = PAINTERS[stageId] || PAINTERS.bamboo;
   if (!paper) paper = paperTexture(VIEW_W, VIEW_H);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(paper, 0, 0);
   const s = camScale(cam);
+  const tf = PARALLAX.map((p) => {
+    const zoom = 1 + (s / BASE_SCALE - 1) * p * 0.5;
+    return {
+      zoom,
+      ox: VIEW_W / 2 - (LW / 2) * zoom - (cam.x - 800) * BASE_SCALE * p - cam.shakeX * p,
+      oy: VIEW_H - VIEW_H * zoom + (-cam.y * s * p * 0.6) + cam.shakeY * p,
+    };
+  });
   for (let i = 0; i < painters.length; i++) {
     if (!painters[i]) continue;
     const img = layer(stageId, i, painters[i]);
-    const p = PARALLAX[i];
-    const zoom = 1 + (s / BASE_SCALE - 1) * p * 0.5;
-    const ox = VIEW_W / 2 - (LW / 2) * zoom - (cam.x - 800) * BASE_SCALE * p - cam.shakeX * p;
-    const oy = VIEW_H - VIEW_H * zoom + (-cam.y * s * p * 0.6) + cam.shakeY * p;
-    ctx.setTransform(zoom, 0, 0, zoom, ox, oy);
+    ctx.setTransform(tf[i].zoom, 0, 0, tf[i].zoom, tf[i].ox, tf[i].oy);
     ctx.drawImage(img, 0, 0);
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  drawLiveBackground(ctx, cam, stageId, t);
+  drawLiveBackground(ctx, cam, stageId, t, extras);
+  if (extras && AREA_PAINTERS[stageId]) drawAreaLive(ctx, stageId, t, tf);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
 // animated, unbaked background touches
-function drawLiveBackground(ctx, cam, stageId, t) {
+function drawLiveBackground(ctx, cam, stageId, t, extras) {
   if (stageId === 'waterfall') {
     const s = camScale(cam);
     const x = VIEW_W / 2 - (cam.x - 800) * BASE_SCALE * 0.5;
@@ -321,11 +296,14 @@ function drawLiveBackground(ctx, cam, stageId, t) {
       }
       ctx.stroke();
     }
-    ctx.globalAlpha = 0.5;
-    ctx.drawImage(puffSprite('#ffffff'), x - 260, VIEW_H - 260, 520, 260);
+    if (extras) {
+      ctx.globalAlpha = 0.5;
+      ctx.drawImage(puffSprite('#ffffff'), x - 260, VIEW_H - 260, 520, 260);
+    }
     ctx.restore();
     void s;
   }
+  if (!extras) return;
   if (stageId === 'bamboo') {
     // drifting leaves
     ctx.save();
@@ -352,7 +330,7 @@ function drawLiveBackground(ctx, cam, stageId, t) {
 
 // Floor drawn in world space (camera transform applied by caller).
 export function drawFloor(ctx, stageId, left, right) {
-  const f = FLOOR[stageId] || FLOOR.bamboo;
+  const f = FLOOR[stageId] || AREA_FLOORS[stageId] || FLOOR.bamboo;
   const grad = ctx.createLinearGradient(0, 0, 0, 260);
   grad.addColorStop(0, f.top);
   grad.addColorStop(1, f.bottom);
@@ -361,7 +339,9 @@ export function drawFloor(ctx, stageId, left, right) {
   brushStroke(ctx, [[left - 600, 1, 1], [800, 3, 1], [right + 600, 1, 1]], 6, f.line, false);
   ctx.strokeStyle = rgba('#000000', 0.25);
   ctx.lineWidth = 2;
-  if (f.tiles) {
+  if (f.style) {
+    drawAreaFloor(ctx, f.style, left, right);
+  } else if (f.tiles) {
     for (let x = left - 600; x < right + 600; x += 48) {
       ctx.beginPath();
       ctx.arc(x, 24, 24, Math.PI, 0);

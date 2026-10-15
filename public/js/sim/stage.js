@@ -12,19 +12,35 @@ import { emit, overlap, worldBox } from './util.js';
 import { rand, randInt, pick } from './rng.js';
 
 export function initStage(s) {
-  const def = STAGES[s.cfg.stageId] || STAGES.bamboo;
-  s.stage = { id: s.cfg.stageId, left: 0, right: RULES.STAGE_W, hazards: [], timer: 0, smashed: {} };
-  const hz = s.stage.hazards;
+  s.stage = { id: null, left: 0, right: RULES.STAGE_W, hazards: [], timer: 0, smashed: {}, next: null, dashMult: 1 };
+  enterArea(s, STAGES[s.cfg.stageId] ? s.cfg.stageId : 'bamboo');
+}
+
+// Sets up an arena's hazards: at match start, and when a scenery-crash KO sends the next round into
+// the area behind the arena (see startRound).
+export function enterArea(s, id) {
+  const def = STAGES[id];
+  const st = s.stage;
+  st.id = id;
+  st.dashMult = def.dashMult || 1;
+  st.gust = null;
+  const hz = (st.hazards = []);
   for (const h of def.hazards) {
     if (h === 'bamboo') hz.push({ kind: 'bamboo', x: 520, st: 'up', t: 0, dir: 1 }, { kind: 'bamboo', x: 1080, st: 'up', t: 0, dir: -1 });
     if (h === 'lanterns') hz.push({ kind: 'lantern', x: 430, y: -310, vy: 0, st: 'up', t: 0 }, { kind: 'lantern', x: 1170, y: -310, vy: 0, st: 'up', t: 0 });
     if (h === 'hay') hz.push({ kind: 'hay', x: 250, st: 'up', hp: 3, t: 0 }, { kind: 'hay', x: 1350, st: 'up', hp: 3, t: 0 });
     if (h === 'rock') hz.push({ kind: 'rock', x: 1330, w: 130 });
+    if (h === 'rocks') hz.push({ kind: 'rock', x: 230, w: 130 }, { kind: 'rock', x: 1370, w: 130 });
     if (h === 'waterfall') hz.push({ kind: 'waterfall', x: 800, w: 170 });
   }
-  s.stage.nextWaiter = 600;
-  s.stage.nextChicken = 360;
-  s.stage.nextGust = 900;
+  resetTimers(st);
+}
+
+function resetTimers(st) {
+  st.nextWaiter = 600;
+  st.nextChicken = 360;
+  st.nextGust = 900;
+  st.nextPeach = 420;
 }
 
 export function resetStageForRound(s) {
@@ -39,9 +55,9 @@ export function resetStageForRound(s) {
     if (h.kind === 'hay') Object.assign(h, { st: 'up', hp: 3, t: 0 });
   }
   s.stage.hazards = s.stage.hazards.filter((h) => h.kind !== 'waiter' && h.kind !== 'dragon');
-  s.stage.nextWaiter = 600;
-  s.stage.nextChicken = 360;
-  s.stage.nextGust = 900;
+  resetTimers(s.stage);
+  // permanent ground zones that belong to the arena (owner -1: nobody is immune)
+  for (const z of STAGES[s.stage.id].zones || []) s.zones.push({ id: s.nextId++, kind: z.kind, x: z.x, w: z.w, t: 1e9, owner: -1 });
   s.heavenly = s.suddenDeath ? { id: 'ancestors', t: 1e9, forced: true } : null;
   scheduleEvent(s);
 }
@@ -233,6 +249,11 @@ export function tickStage(s, framesEvents) {
     const dir = rand(s) < 0.5 ? 1 : -1;
     s.props.push({ id: s.nextId++, kind: 'chicken', x: dir > 0 ? -30 : RULES.STAGE_W + 30, y: 0, vx: dir * (2 + rand(s) * 1.5), vy: 0, t: 0, flying: false });
     emit(s, { t: 'sfx', id: 'cluck' });
+  }
+  if (def.hazards.includes('peaches') && s.phase === 'fight' && st.timer >= st.nextPeach) {
+    st.nextPeach = st.timer + randInt(s, 840, 1140);
+    s.pickups.push({ id: s.nextId++, kind: 'peach', x: randInt(s, 200, RULES.STAGE_W - 200), y: -560, t: 0 });
+    emit(s, { t: 'sfx', id: 'boing' });
   }
   if (def.hazards.includes('cloud') && s.phase === 'fight' && st.timer >= st.nextGust) {
     st.nextGust = st.timer + 900;

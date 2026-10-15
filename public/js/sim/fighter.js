@@ -261,7 +261,7 @@ export function startDash(s, f) {
   const d = fwd ? RULES.DASH_F : RULES.DASH_B;
   const frames = d.frames;
   f.dashFrames = frames;
-  f.dashV = ((d.dist / frames) * (fwd ? 1 : -1) * f.facing * f.mods.dashMult) * (f.traits.dashMult || 1);
+  f.dashV = ((d.dist / frames) * (fwd ? 1 : -1) * f.facing * f.mods.dashMult) * (f.traits.dashMult || 1) * (s.stage?.dashMult || 1);
   emit(s, { t: 'dash', side: f.side, back: !fwd });
 }
 

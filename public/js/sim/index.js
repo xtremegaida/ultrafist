@@ -13,7 +13,8 @@ import { resolveBuild } from './builds.js';
 
 export const SIM_VERSION = 1;
 
-// cfg: { seed, stageId, builds: [build, build], events: 'off'|'rare'|'normal'|'chaos', timer, wins, training }
+// cfg: { seed, stageId, builds: [build, build], events: 'off'|'rare'|'normal'|'chaos', timer, wins, training,
+//        transitions (default true) }
 export function createMatch(cfg) {
   const c = {
     seed: cfg.seed >>> 0 || 1,
@@ -22,6 +23,7 @@ export function createMatch(cfg) {
     timer: cfg.timer || RULES.ROUND_TIME,
     wins: cfg.wins || RULES.WINS,
     training: cfg.training || null,
+    transitions: cfg.transitions !== false,
   };
   const builds = cfg.builds.map((b) => resolveBuild(b));
   const s = {

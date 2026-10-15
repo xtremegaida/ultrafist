@@ -9,7 +9,7 @@ const PROFILE_KEY = 'ultrafist.profile.v1';
 
 export const DEFAULT_SETTINGS = {
   master: 0.9, music: 0.7, sfx: 0.9, voice: 0.9, speech: true,
-  events: 'normal', wins: 2, timer: 99, quality: 'high', bindingsPreset: 'standard', cpuLevel: 2,
+  events: 'normal', wins: 2, timer: 99, transitions: true, quality: 'high', showFps: false, bindingsPreset: 'standard', cpuLevel: 2,
 };
 
 export function loadSettings() {

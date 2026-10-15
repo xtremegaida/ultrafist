@@ -311,7 +311,7 @@ export function drawRoundIntro(ctx, v, t, cosOf) {
   if (v.phase !== 'intro') return;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const T = v.phaseT;
-  const introLen = v.round === 1 ? RULES.INTRO_FRAMES : RULES.INTRO_FRAMES - 40;
+  const introLen = v.introLen ?? RULES.INTRO_FRAMES;
   const fightAt = introLen - RULES.FIGHT_FRAMES;
   ctx.save();
   if (T < fightAt) {

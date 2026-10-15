@@ -12,6 +12,7 @@ import { createAI, aiInput } from '../public/js/sim/ai.js';
 import { getMove, getProj, getChar, CHAR_IDS, SCROLLS } from '../public/js/data/registry.js';
 import { PRESETS, presetsFor } from '../public/js/data/presets.js';
 import { RULES } from '../public/js/data/rules.js';
+import { STAGES, STAGE_IDS, AREA_IDS } from '../public/js/data/stages.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -389,5 +390,104 @@ describe('roster data', () => {
       assert.ok(m && m.dur > 0, id);
       assert.ok(SCROLLS[id].cost >= 1 && SCROLLS[id].cost <= 3, id);
     }
+  });
+});
+
+// ---- stage transitions ---------------------------------------------------------------------------
+
+// Knock `loser` out with a wall-bounce finisher and wait for the next round to begin.
+function crashKO(s, loser) {
+  const round = s.round;
+  s.fighters[loser].hp = 0;
+  s.fighters[loser].lastHit = { wb: true };
+  const evs = [];
+  for (let i = 0; i < 900 && s.round === round; i++) {
+    step(s, [0, 0]);
+    evs.push(...s.events);
+  }
+  assert.equal(s.round, round + 1, 'next round started');
+  return evs;
+}
+
+function toFight(s) {
+  for (let i = 0; i < 400 && s.phase !== 'fight'; i++) step(s, [0, 0]);
+  assert.equal(s.phase, 'fight');
+}
+
+describe('stage transitions', () => {
+  test('every arena hides an area behind it, which leads back; hidden areas are not selectable', () => {
+    assert.equal(STAGE_IDS.length, 6);
+    assert.equal(AREA_IDS.length, 6);
+    for (const id of STAGE_IDS) {
+      const area = STAGES[id].beyond;
+      assert.ok(AREA_IDS.includes(area), `${id} -> ${area}`);
+      assert.equal(STAGES[area].parent, id);
+      assert.equal(STAGES[area].beyond, id);
+    }
+  });
+
+  test('a scenery-crash KO sends the next round into the area behind the arena', () => {
+    const s = fightReady('longxu', 'dazhong', { stage: 'barnyard' });
+    const evs = crashKO(s, 1);
+    assert.equal(evs.find((e) => e.t === 'ko').type, 'crash');
+    assert.ok(evs.some((e) => e.t === 'stageChange' && e.id === 'pigpen' && e.from === 'barnyard'));
+    assert.equal(s.stage.id, 'pigpen');
+    assert.equal(pack(s).stage.id, 'pigpen');
+    assert.ok(!s.stage.hazards.some((h) => h.kind === 'hay'), 'barnyard hazards are left behind');
+    // the pigpen's two mud wallows are permanent
+    toFight(s);
+    run(s, 600);
+    assert.equal(s.zones.filter((z) => z.kind === 'mud').length, 2);
+  });
+
+  test('another crash KO sends the fight back; transitions can be switched off', () => {
+    const s = fightReady('longxu', 'dazhong', { stage: 'teahouse' });
+    crashKO(s, 1);
+    assert.equal(s.stage.id, 'kitchen');
+    assert.ok(s.zones.some((z) => z.kind === 'lard'));
+    toFight(s);
+    crashKO(s, 0);
+    assert.equal(s.stage.id, 'teahouse');
+    assert.ok(!s.zones.some((z) => z.kind === 'lard'));
+
+    const off = fightReady('longxu', 'dazhong', { stage: 'teahouse', cfg: { transitions: false } });
+    const evs = crashKO(off, 1);
+    assert.equal(off.stage.id, 'teahouse');
+    assert.ok(!evs.some((e) => e.t === 'stageChange'));
+  });
+
+  test('other KO types stay put', () => {
+    const s = fightReady('longxu', 'dazhong', { stage: 'cloud' });
+    s.fighters[1].hp = 0;
+    s.fighters[1].lastHit = { up: true };
+    const evs = [];
+    for (let i = 0; i < 900 && s.round === 1; i++) {
+      step(s, [0, 0]);
+      evs.push(...s.events);
+    }
+    assert.equal(evs.find((e) => e.t === 'ko').type, 'star');
+    assert.equal(s.stage.id, 'cloud');
+  });
+
+  test('peaches fall in the Peach Garden; slick floors make dashes longer', () => {
+    const s = fightReady('longxu', 'dazhong', { stage: 'peaches' });
+    let peach = false;
+    for (let i = 0; i < 1500 && !peach; i++) {
+      step(s, [0, 0]);
+      peach = s.pickups.some((p) => p.kind === 'peach');
+    }
+    assert.ok(peach, 'a peach fell');
+
+    const dashDist = (stage) => {
+      const m = fightReady('longxu', 'dazhong', { stage });
+      place(m, 600);
+      const x0 = m.fighters[0].x;
+      run(m, 40, (i) => (i === 0 || i === 3 ? BTN.R : 0));
+      return m.fighters[0].x - x0;
+    };
+    const base = dashDist('bamboo');
+    assert.ok(base > 100, `dash moved ${base}`);
+    assert.ok(dashDist('rooftop') > base * 1.1, 'rooftop tiles are slippery');
+    assert.ok(dashDist('lotus') > base * 1.15, 'lily pads are slicker still');
   });
 });

@@ -120,6 +120,7 @@ function showRoom(app) {
     if (!room) return;
     body.innerHTML = '';
     const you = room.you;
+    const sendStage = (change) => net.send({ t: C.STAGE, stageId: room.stageId, events: room.events, transitions: room.transitions !== false, ...change });
     const seats = room.seats.map((s, i) => {
       if (!s) return h('div', { class: 'seat' }, h('div', { class: 'desc-text' }, `Seat ${i + 1}: waiting for a challenger...`));
       return h('div', { class: 'seat filled' },
@@ -138,15 +139,21 @@ function showRoom(app) {
       h('div', { class: 'row' },
         h('label', {}, 'Arena'),
         room.host
-          ? h('select', { 'data-nav': '1', onchange: (e) => net.send({ t: C.STAGE, stageId: e.target.value, events: room.events }) },
+          ? h('select', { 'data-nav': '1', onchange: (e) => sendStage({ stageId: e.target.value }) },
             h('option', { value: 'random', selected: room.stageId === 'random' ? true : null }, 'Random'),
             STAGE_IDS.map((id) => h('option', { value: id, selected: room.stageId === id ? true : null }, STAGES[id].name)))
           : h('span', {}, room.stageId === 'random' ? 'Random' : STAGES[room.stageId]?.name),
         h('label', {}, 'Events'),
         room.host
-          ? h('select', { 'data-nav': '1', onchange: (e) => net.send({ t: C.STAGE, stageId: room.stageId, events: e.target.value }) },
+          ? h('select', { 'data-nav': '1', onchange: (e) => sendStage({ events: e.target.value }) },
             ['off', 'rare', 'normal', 'chaos'].map((v) => h('option', { value: v, selected: room.events === v ? true : null }, v)))
-          : h('span', {}, room.events)));
+          : h('span', {}, room.events)),
+      h('div', { class: 'row' },
+        h('label', {}, 'Stage transitions'),
+        room.host
+          ? h('select', { 'data-nav': '1', onchange: (e) => sendStage({ transitions: e.target.value === 'on' }) },
+            [['on', 'On'], ['off', 'Off']].map(([v, txt]) => h('option', { value: v, selected: (room.transitions !== false) === (v === 'on') ? true : null }, txt)))
+          : h('span', {}, room.transitions !== false ? 'On' : 'Off')));
     const right = h('div', { class: 'panel col' });
     if (you.seat >= 0) {
       const mine = room.seats[you.seat];

@@ -9,12 +9,54 @@ import { drawBackground, drawFloor, drawHazards, drawZones, drawProps } from './
 import { drawProjectiles } from './projectiles.js';
 import { drawHud, createHudState } from './hud.js';
 import { drawCutIn, drawCineBackdrop, drawCineWorld, drawClash, drawKO, drawRoundIntro, drawHeavenlyOverlay } from './overlays.js';
-import { rgba, limb, circle } from './brush.js';
+import { rgba, limb, circle, makeCanvas, rng, INK } from './brush.js';
 import { drawStar } from './fx.js';
 
-export function createRenderer(canvas) {
-  const ctx = canvas.getContext('2d', { alpha: false });
-  return {
+// Graphics quality. Everything is drawn in 1280x720 view coordinates; the canvas backing store can
+// be smaller ('low') or match the real screen pixels ('ultra', sharper on big and high-DPI screens).
+export const QUALITY = {
+  low: { res: 0.75, density: 0.5, cap: 160, afterEvery: 6, extras: false },
+  high: { res: 1, density: 1, cap: 420, afterEvery: 3, extras: true },
+  ultra: { res: 'screen', density: 1, cap: 420, afterEvery: 3, extras: true },
+};
+
+// setTransform on the game canvas is wrapped once so every caller keeps using view coordinates
+// while the resolution factor is folded in underneath.
+const resOf = new WeakMap();
+
+function scalableContext(ctx) {
+  if (!resOf.has(ctx)) {
+    const raw = ctx.setTransform.bind(ctx);
+    resOf.set(ctx, 1);
+    ctx.setTransform = (a, b, c, d, e, f) => {
+      const k = resOf.get(ctx);
+      raw(a * k, b * k, c * k, d * k, e * k, f * k);
+    };
+  }
+  return ctx;
+}
+
+// screenScale: device pixels per view pixel at the current window size (only 'ultra' uses it).
+export function setQuality(r, quality, screenScale = 1) {
+  const id = QUALITY[quality] ? quality : 'high';
+  const q = QUALITY[id];
+  const k = q.res === 'screen' ? Math.min(2, Math.max(1, Math.round(screenScale * 4) / 4)) : q.res;
+  const w = Math.round(VIEW_W * k);
+  const h = Math.round(VIEW_H * k);
+  if (r.canvas.width !== w || r.canvas.height !== h) {
+    r.canvas.width = w;
+    r.canvas.height = h;
+  }
+  resOf.set(r.ctx, k);
+  r.quality = id;
+  r.q = q;
+  r.fx.density = q.density;
+  r.fx.cap = q.cap;
+}
+
+export function createRenderer(canvas, opts = {}) {
+  const ctx = scalableContext(canvas.getContext('2d', { alpha: false }));
+  const r = {
     canvas,
     ctx,
     cam: createCamera(),
@@ -24,9 +66,12 @@ export function createRenderer(canvas) {
     t: 0,
     stageFlip: 0,
     sunrise: 0,
+    tear: null,
     debug: false,
     debugDraw: null,
   };
+  setQuality(r, opts.quality || 'high', opts.screenScale || 1);
+  return r;
 }
 
 function snapshotJ(f, J) {
@@ -59,7 +104,7 @@ export function renderFrame(r, v, opts = {}) {
   // 1. background
   const stageId = v.stage?.id || 'bamboo';
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  drawBackground(ctx, cam, stageId, r.t);
+  drawBackground(ctx, cam, stageId, r.t, r.q.extras);
   if (r.sunrise > 0) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = `rgba(255,140,40,${Math.min(0.35, r.sunrise / 300)})`;
@@ -139,6 +184,77 @@ export function renderFrame(r, v, opts = {}) {
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     ctx.globalAlpha = 1;
   }
+  if (r.tear) drawTear(r, dt);
+}
+
+// ---- stage transition: the old scene rips apart like paper to reveal the area behind it ----------
+
+const TEAR_FRAMES = 56;
+const TEAR_HOLD = 10; // the rip runs down the page before the halves fly apart
+
+// Call before rendering the first frame of the new area: the canvas still holds the old scene.
+export function triggerTear(r) {
+  if (!r.tearImg) r.tearImg = makeCanvas(VIEW_W, VIEW_H);
+  const g = r.tearImg.getContext('2d');
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.drawImage(r.canvas, 0, 0, VIEW_W, VIEW_H);
+  const rand = rng(((r.t * 977) | 0) + 1);
+  const pts = [];
+  for (let y = -30; y <= VIEW_H + 30; y += 22) pts.push([VIEW_W / 2 + (rand() - 0.5) * 70 + Math.sin(y / 90) * 40, y]);
+  r.tear = { t: 0, pts };
+}
+
+function tearHalf(ctx, pts, px) {
+  ctx.beginPath();
+  ctx.moveTo(px, -40);
+  for (const p of pts) ctx.lineTo(p[0], p[1]);
+  ctx.lineTo(px, VIEW_H + 40);
+  ctx.closePath();
+}
+
+function drawTear(r, dt) {
+  const { ctx } = r;
+  const T = (r.tear.t += dt);
+  if (T >= TEAR_FRAMES) {
+    r.tear = null;
+    return;
+  }
+  const { pts } = r.tear;
+  const e = Math.max(0, (T - TEAR_HOLD) / (TEAR_FRAMES - TEAR_HOLD)) ** 2;
+  for (const side of [-1, 1]) {
+    const px = side < 0 ? 0 : VIEW_W;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.save();
+    // each half swings away around its outer bottom corner
+    const shudder = T < TEAR_HOLD ? Math.sin(T * 2.7) * 3 : 0;
+    ctx.translate(px + side * e * 820 + shudder, VIEW_H + e * 220);
+    ctx.rotate(side * e * 0.55);
+    ctx.translate(-px, -VIEW_H);
+    if (e > 0) {
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      ctx.save();
+      ctx.translate(side * 10, 8);
+      tearHalf(ctx, pts, px);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.save();
+    tearHalf(ctx, pts, px);
+    ctx.clip();
+    ctx.drawImage(r.tearImg, 0, 0, VIEW_W, VIEW_H);
+    ctx.restore();
+    // torn paper fibres along the rip
+    const n = e > 0 ? pts.length : Math.max(2, Math.ceil((T / TEAR_HOLD) * pts.length));
+    ctx.lineJoin = 'round';
+    for (const [w, col] of [[9, '#f3ead7'], [2.5, INK]]) {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) ctx.lineTo(pts[i][0] + (w > 3 ? side * 2 : 0), pts[i][1]);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 }
 
 function drawOneFighter(r, v, f, opts) {
@@ -155,7 +271,7 @@ function drawOneFighter(r, v, f, opts) {
   // afterimages
   if (wantsAfterimage(f)) {
     sd.afterT += 1;
-    if (sd.afterT >= 3) {
+    if (sd.afterT >= r.q.afterEvery) {
       sd.afterT = 0;
       afterimage(fx, snapshotJ(f, J), 14, f.awakened > 0 ? '#ff4d6d' : rgba(cos.c1 && cos.c1 !== '#f8f9fa' ? cos.c1 : '#16120f', 0.9));
     }

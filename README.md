@@ -26,7 +26,8 @@ Then open **http://localhost:3000**. There is nothing to install: the project ha
 2. Everyone (including the host) opens that address in a browser and picks **LAN Battle**.
 3. One player **creates a room** and shares the 4-letter code; the other **joins** it. Anyone else can
    **watch** — spectators can join mid-match.
-4. Pick fighters and builds, press **READY**. The host chooses the arena and Heavenly Event frequency.
+4. Pick fighters and builds, press **READY**. The host chooses the arena, the Heavenly Event frequency and whether
+   stage transitions are on.
 
 The server is authoritative: it runs the same simulation as the browser and streams the fight to every
 player and spectator, so everyone always sees the same match. If a player drops, the match pauses for
@@ -130,16 +131,51 @@ Every half-minute the heavens may intervene: Moon Festival, Rain of Tea, Ancesto
 Dragon Flyover, Fortune Cookie Storm, Turtle Time, Hungry Ghosts and the Emperor's Decree. Frequency can be
 set to Off / Rare / Normal / Chaos.
 
+### Stage transitions
+
+Every arena hides another area behind it. When a KO smashes the loser **through the scenery** (a wall-bounce
+or hazard finisher), the arena rips apart like paper and the next round is fought in the area behind it —
+another crash KO sends the fight back:
+
+| Arena | Behind it | What changes |
+|---|---|---|
+| Bamboo Forest | Moonlit Lotus Pond 蓮池 | slick lily pads: dashes skid further |
+| Temple Rooftop | Hall of a Thousand Buddhas 千佛殿 | temple lanterns still fall and burn |
+| Tea House | Tea House Kitchen 廚房 | a grease spill mid-floor, chopping blocks by the walls |
+| Barnyard | The Pigpen 豬圈 | two mud wallows slow everyone except pigs |
+| Waterfall Peak | Water Curtain Cave 水簾洞 | a healing meditation stone on each side |
+| Cloud Court | Peach Garden of Immortality 蟠桃園 | peaches of immortality drop from the trees |
+
+Turn them off under Settings → Rules (or, in a LAN room, the host's *Stage transitions* option).
+
+## Graphics
+
+Settings → Graphics → **Quality**:
+
+- **Low (fast)** renders at 75% resolution with half the particles and no animated background extras. Try
+  it if fights stutter.
+- **High** (default) renders at 1280×720.
+- **Ultra (sharp)** renders at your screen's real resolution (up to 2×) for big or high-DPI displays.
+
+**Show FPS** puts a frame-rate counter in the corner.
+
 ## Development
 
 ```bash
-npm test                      # 84 tests: sim purity, determinism, motion inputs, combat, builds, roster, WebSocket, LAN
+npm test                      # 89 tests: sim purity, determinism, motion inputs, combat, builds, roster, stages, WebSocket, LAN
 npm run soak                  # AI-vs-AI soak: every pairing, win rates, invariant checks
 node tools/soak.js 5 4        # 5 matches per pairing at difficulty tier 4
 node tools/check-imports.mjs  # static check that every import resolves
 ```
 
-`public/dev/sound.html` (while the server runs) is a test board for every sound, voice, music track and speech.
+While the server runs, two dev pages help with authoring:
+
+- **`/dev/anim.html`**, the animation viewer: steps any move or state of any fighter frame by frame using the real
+  pose, skin and hitbox code. It shows hurtboxes, hitboxes, pushboxes, projectile spawns, onion skin and joints,
+  plus a timeline of startup, active, recovery, invulnerability, armor and parry frames, and the full frame data.
+  - The **pose lab** edits any pose in POSES live and prints the line to paste into `render/pose.js`.
+  - The URL hash links to an exact frame, e.g. `/dev/anim.html#c=moolan&k=move&m=milkBeam&f=12`.
+- **`/dev/sound.html`**, a test board for every sound, voice, music track and speech.
 
 ### How it fits together
 
@@ -150,11 +186,13 @@ server/rooms.js        LAN lobby: rooms, seats, spectators, ready-up, rejoin, fo
 server/match-host.js   authoritative 60 Hz match loop; broadcasts packed snapshots
 public/js/sim/         the pure, deterministic simulation (no DOM, seeded RNG) — runs in browser and Node
 public/js/data/        rules, characters, moves, stances, inner arts, scrolls, presets, stages, events
-public/js/render/      Canvas 2D ink-wash renderer: skeleton poses, skins, effects, HUD, cut-ins
+public/js/render/      Canvas 2D ink-wash renderer: skeleton poses, skins, effects, HUD, cut-ins, arenas
+                       and the hidden areas behind them (areas.js)
 public/js/audio/       Web Audio synthesis (SFX, animal voices, procedural music) + speechSynthesis
 public/js/game/        local sessions and the "director" that turns sim events into juice
 public/js/net/         LAN client: input upload and snapshot playback
 public/js/ui/          menus, character/stage select, workshop, lobby, settings
+public/dev/            animation viewer and sound board
 ```
 
 The simulation is a pure function of `(state, inputs)`: offline the browser steps it, online the Node

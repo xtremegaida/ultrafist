@@ -1,6 +1,6 @@
 // UltraFist entry point: canvas scaling, main loop, scene management, match lifecycle.
 
-import { createRenderer, renderFrame } from './render/renderer.js';
+import { createRenderer, renderFrame, setQuality } from './render/renderer.js';
 import { drawDebugBoxes } from './render/debug.js';
 import { createDirector, direct, startMatchAudio } from './game/director.js';
 import { createLocalSession } from './game/session.js';
@@ -22,12 +22,23 @@ const canvas = document.getElementById('game');
 const uiRoot = document.getElementById('ui');
 const stageEl = document.getElementById('stage');
 
+const settings = loadSettings();
+
+// device pixels per 1280x720 view pixel at the current window size
+function screenScale() {
+  return Math.min(window.innerWidth / 1280, window.innerHeight / 720) * (window.devicePixelRatio || 1);
+}
+
+function newRenderer() {
+  return createRenderer(canvas, { quality: settings.quality, screenScale: screenScale() });
+}
+
 export const app = {
   canvas,
   uiRoot,
-  renderer: createRenderer(canvas),
+  renderer: newRenderer(),
   director: createDirector(),
-  settings: loadSettings(),
+  settings,
   session: null,
   sessionMode: null, // 'attract' | 'match' | 'net'
   match: null, // { mode, cos, onEnd, ... }
@@ -41,6 +52,8 @@ function fit() {
   const s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
   stageEl.style.transformOrigin = 'center center';
   stageEl.style.transform = `translate(-50%, -50%) scale(${s})`;
+  // 'ultra' quality follows the real screen resolution
+  if (app.renderer.quality === 'ultra') setQuality(app.renderer, 'ultra', screenScale());
 }
 window.addEventListener('resize', fit);
 fit();
@@ -55,6 +68,7 @@ export function applySettings() {
   audio.setVolume('sfx', st.sfx);
   audio.setVolume('voice', st.voice);
   audio.speech.enabled = !!st.speech;
+  setQuality(app.renderer, st.quality, screenScale());
   const custom = loadBindings();
   setBindings(st.bindingsPreset === 'custom' ? custom : structuredClone(KEY_PRESETS[st.bindingsPreset] || KEY_PRESETS.standard));
   setGameKeys([...allGameKeys(), 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'F1']);
@@ -125,12 +139,13 @@ export function startMatch(cfg) {
     timer: cfg.training ? 99 : st.timer,
     wins: st.wins,
     training: cfg.training || null,
+    transitions: st.transitions,
   });
   app.session = session;
   app.sessionMode = 'match';
   app.match = { ...cfg, cos: cfg.builds.map((b) => resolveBuild(b).cos) };
   app.director = createDirector();
-  app.renderer = createRenderer(canvas);
+  app.renderer = newRenderer();
   app.renderer.debugDraw = drawDebugBoxes;
   app.endShown = false;
   startMatchAudio(app.director, cfg.stageId);
@@ -142,7 +157,7 @@ export function startNetView(net) {
   app.session = net;
   app.sessionMode = 'net';
   app.director = createDirector();
-  app.renderer = createRenderer(canvas);
+  app.renderer = newRenderer();
   app.endShown = false;
 }
 
@@ -159,11 +174,30 @@ export function quitToMenu() {
 
 // ---- main loop ---------------------------------------------------------------------------------
 
+// optional FPS meter (Settings > Graphics), smoothed over ~20 frames
+const fps = { last: 0, ms: 1000 / 60 };
+
+function drawFps(ctx) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const txt = `${Math.round(1000 / fps.ms)} fps · ${canvas.width}×${canvas.height} · ${app.renderer.quality}`;
+  ctx.font = '13px ui-monospace, Consolas, monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = 'rgba(22,18,15,0.7)';
+  ctx.fillRect(6, 694, ctx.measureText(txt).width + 12, 20);
+  ctx.fillStyle = '#f3ead7';
+  ctx.fillText(txt, 12, 709);
+}
+
 let lastW = 0;
 let lastH = 0;
+let lastDpr = 0;
 function loop(now) {
   requestAnimationFrame(loop);
-  if (window.innerWidth !== lastW || window.innerHeight !== lastH) {
+  if (fps.last) fps.ms += (Math.min(250, now - fps.last) - fps.ms) * 0.05;
+  fps.last = now;
+  if (window.innerWidth !== lastW || window.innerHeight !== lastH || window.devicePixelRatio !== lastDpr) {
+    lastDpr = window.devicePixelRatio;
     lastW = window.innerWidth;
     lastH = window.innerHeight;
     fit();
@@ -177,6 +211,7 @@ function loop(now) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#f3ead7';
     ctx.fillRect(0, 0, 1280, 720);
+    if (app.settings.showFps) drawFps(ctx);
     return;
   }
   const events = sess.update(now);
@@ -195,6 +230,7 @@ function loop(now) {
     ping: sess.ping,
     spectating: sess.spectating,
   });
+  if (app.settings.showFps) drawFps(app.renderer.ctx);
 
   if (app.sessionMode === 'attract' && view.phase === 'matchEnd' && view.phaseT > 120) startAttract();
 

@@ -31,7 +31,7 @@ function packFighter(f) {
 export function pack(s) {
   return {
     frame: s.frame,
-    phase: s.phase, phaseT: s.phaseT, round: s.round, wins: s.wins, timer: s.timer, winner: s.winner,
+    phase: s.phase, phaseT: s.phaseT, introLen: s.introLen, round: s.round, wins: s.wins, timer: s.timer, winner: s.winner,
     cfg: { wins: s.cfg.wins, training: s.cfg.training ? 1 : 0, stageId: s.cfg.stageId },
     suddenDeath: s.suddenDeath,
     freeze: s.freeze, cine: s.cine ? { by: s.cine.by, t: s.cine.t, bg: s.cine.bg } : null,

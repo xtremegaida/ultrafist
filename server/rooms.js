@@ -56,7 +56,7 @@ export function createLobby(opts = {}) {
     return {
       t: S.ROOM, code: room.code, name: room.name, phase: room.phase,
       host: room.hostId === forClient.id,
-      stageId: room.stageId, events: room.events,
+      stageId: room.stageId, events: room.events, transitions: room.transitions,
       seats: room.seats.map(seatInfo),
       specs: room.specs.size,
       you: { seat: seatIdx, role: seatIdx >= 0 ? 'p' : 's' },
@@ -108,7 +108,7 @@ export function createLobby(opts = {}) {
   function startMatch(room) {
     const seed = crypto.randomInt(1, 2 ** 31);
     const builds = room.seats.map((s) => resolveBuild(s.build));
-    const cfg = { seed, stageId: room.stageId === 'random' ? STAGE_IDS[crypto.randomInt(STAGE_IDS.length)] : room.stageId, builds, events: room.events, timer: 99, wins: 2 };
+    const cfg = { seed, stageId: room.stageId === 'random' ? STAGE_IDS[crypto.randomInt(STAGE_IDS.length)] : room.stageId, builds, events: room.events, transitions: room.transitions, timer: 99, wins: 2 };
     room.phase = 'match';
     room.cfg = cfg;
     room.host = createMatchHost(cfg, {
@@ -182,7 +182,7 @@ export function createLobby(opts = {}) {
         const r = {
           code, name: cleanName(msg.name || `${c.name}'s dojo`), phase: 'lobby', hostId: c.id,
           seats: [{ clientId: c.id, name: c.name, build: defaultBuild(CHAR_IDS[0]), ready: false }, null],
-          specs: new Set(), stageId: 'random', events: 'normal', host: null, cfg: null,
+          specs: new Set(), stageId: 'random', events: 'normal', transitions: true, host: null, cfg: null,
         };
         rooms.set(code, r);
         c.room = code;
@@ -219,6 +219,7 @@ export function createLobby(opts = {}) {
         if (room.hostId !== c.id) return send(c, { t: S.ERR, code: ERR.NOT_HOST, msg: 'Only the host can change the arena.' });
         if (msg.stageId === 'random' || STAGE_IDS.includes(msg.stageId)) room.stageId = msg.stageId;
         if (EVENT_LEVELS.includes(msg.events)) room.events = msg.events;
+        if (typeof msg.transitions === 'boolean') room.transitions = msg.transitions;
         return broadcastRoom(room);
       }
       case C.READY: {

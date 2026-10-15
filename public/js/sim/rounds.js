@@ -2,13 +2,21 @@
 
 import { RULES } from '../data/rules.js';
 import { resetForRound, setState, faceOpponent } from './fighter.js';
-import { resetStageForRound } from './stage.js';
+import { resetStageForRound, enterArea } from './stage.js';
+import { STAGES } from '../data/stages.js';
 import { endCombo } from './states.js';
 import { emit } from './util.js';
 import { rand } from './rng.js';
 
 export function startRound(s) {
   const [a, b] = s.fighters;
+  // the last round ended with someone smashed through the scenery: fight on in the area behind it
+  const from = s.stage.id;
+  if (s.stage.next) {
+    enterArea(s, s.stage.next);
+    s.stage.next = null;
+    emit(s, { t: 'stageChange', id: s.stage.id, from });
+  }
   const mid = (s.stage.left + s.stage.right) / 2;
   resetForRound(a, mid - 190, 1);
   resetForRound(b, mid + 190, -1);
@@ -19,6 +27,8 @@ export function startRound(s) {
   s.round++;
   s.phase = 'intro';
   s.phaseT = 0;
+  // later rounds get a shorter intro, unless there is a new area to take in
+  s.introLen = s.round === 1 || s.stage.id !== from ? RULES.INTRO_FRAMES : RULES.INTRO_FRAMES - 40;
   s.timerF = s.cfg.timer * 60;
   s.timer = s.cfg.timer;
   s.hitstop = 0;
@@ -38,9 +48,8 @@ export function tickRounds(s) {
   const [a, b] = s.fighters;
   switch (s.phase) {
     case 'intro': {
-      const introLen = s.round === 1 ? RULES.INTRO_FRAMES : RULES.INTRO_FRAMES - 40;
-      if (s.phaseT === introLen - RULES.FIGHT_FRAMES) emit(s, { t: 'fight' });
-      if (s.phaseT >= introLen) {
+      if (s.phaseT === s.introLen - RULES.FIGHT_FRAMES) emit(s, { t: 'fight' });
+      if (s.phaseT >= s.introLen) {
         s.phase = 'fight';
         s.phaseT = 0;
         for (const f of s.fighters) {
@@ -120,6 +129,7 @@ function startKO(s, winner) {
   else type = rand(s) < 0.5 ? 'signature' : 'crater';
   if (L.st === 'egg') type = 'signature';
   s.ko = { winner, type, loser: loserSides[0], double: winner < 0 };
+  if (type === 'crash' && s.cfg.transitions && !s.cfg.training) s.stage.next = STAGES[s.stage.id].beyond || null;
   for (const side of loserSides) {
     const f = s.fighters[side];
     f.move = null;

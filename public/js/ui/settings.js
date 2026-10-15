@@ -36,7 +36,7 @@ function choice(label, options, value, onChange) {
 export function showSettings(app) {
   const st = app.settings;
   const save = () => app.persistSettings();
-  const left = h('div', { class: 'panel col', style: { width: '560px' } },
+  const left = h('div', { class: 'panel col scroll-area', style: { width: '560px', maxHeight: '500px' } },
     h('div', { class: 'section-h' }, h('span', { class: 'cjk' }, '聲'), 'AUDIO'),
     slider('Master', st.master, (v) => { st.master = v; save(); }),
     slider('Music', st.music, (v) => { st.music = v; save(); }),
@@ -47,7 +47,13 @@ export function showSettings(app) {
     h('div', { class: 'section-h' }, h('span', { class: 'cjk' }, '規'), 'RULES'),
     choice('Rounds to win', [[1, '1'], [2, '2'], [3, '3']], st.wins, (v) => { st.wins = v; save(); }),
     choice('Round timer', [[60, '60'], [99, '99'], [999, '∞']], st.timer, (v) => { st.timer = v; save(); }),
-    choice('Heavenly Events', [['off', 'Off'], ['rare', 'Rare'], ['normal', 'Normal'], ['chaos', 'Chaos']], st.events, (v) => { st.events = v; save(); }));
+    choice('Heavenly Events', [['off', 'Off'], ['rare', 'Rare'], ['normal', 'Normal'], ['chaos', 'Chaos']], st.events, (v) => { st.events = v; save(); }),
+    choice('Stage transitions', [[true, 'On'], [false, 'Off']], st.transitions, (v) => { st.transitions = v; save(); }),
+    h('div', { class: 'desc-text' }, 'A KO that smashes someone through the scenery sends the next round into the hidden area behind the arena.'),
+    h('div', { class: 'section-h' }, h('span', { class: 'cjk' }, '畫'), 'GRAPHICS'),
+    choice('Quality', [['low', 'Low (fast)'], ['high', 'High'], ['ultra', 'Ultra (sharp)']], st.quality, (v) => { st.quality = v; save(); }),
+    h('div', { class: 'desc-text' }, 'Low renders at 75% resolution with fewer particles — try it if fights stutter. Ultra renders at your screen\'s full resolution for big or high-DPI displays.'),
+    choice('Show FPS', [[false, 'Off'], [true, 'On']], st.showFps, (v) => { st.showFps = v; save(); }));
 
   const keysBox = h('div', {});
   const drawKeys = () => {

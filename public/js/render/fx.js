@@ -6,7 +6,8 @@ import { INK, GOLD, PAPER, splatSprite, puffSprite, brushText, seal, rgba, limb,
 const MAX_PARTICLES = 420;
 
 export function createFx() {
-  return { parts: [], decals: [], glyphs: [], screen: [], after: [], flash: 0, flashColor: '#ffffff', seed: 99, t: 0, darken: 0, desat: 0 };
+  // density and cap are set by the graphics quality setting
+  return { parts: [], decals: [], glyphs: [], screen: [], after: [], flash: 0, flashColor: '#ffffff', seed: 99, t: 0, darken: 0, desat: 0, density: 1, cap: MAX_PARTICLES };
 }
 
 function rnd(fx) {
@@ -19,14 +20,19 @@ export function R(fx, a = 0, b = 1) {
 }
 
 function push(fx, p) {
-  if (fx.parts.length >= MAX_PARTICLES) fx.parts.shift();
+  if (fx.parts.length >= fx.cap) fx.parts.shift();
   fx.parts.push(p);
+}
+
+// particle count scaled by the quality setting
+function count(fx, n) {
+  return n > 0 ? Math.max(1, Math.round(n * fx.density)) : 0;
 }
 
 // ---- spawners ---------------------------------------------------------------------------------
 
 export function drops(fx, x, y, n, color = INK, speed = 6, dirX = 0) {
-  for (let i = 0; i < n; i++) {
+  for (let i = 0, c = count(fx, n); i < c; i++) {
     const a = R(fx, 0, Math.PI * 2);
     const sp = R(fx, speed * 0.3, speed);
     push(fx, { k: 'drop', x, y, vx: Math.cos(a) * sp + dirX * 2, vy: Math.sin(a) * sp - 2, r: R(fx, 1.5, 4.5), c: color, life: R(fx, 25, 50), max: 50, g: 0.35 });
@@ -34,7 +40,7 @@ export function drops(fx, x, y, n, color = INK, speed = 6, dirX = 0) {
 }
 
 export function sparks(fx, x, y, n, color = '#ffffff', len = 26) {
-  for (let i = 0; i < n; i++) {
+  for (let i = 0, c = count(fx, n); i < c; i++) {
     const a = R(fx, 0, Math.PI * 2);
     push(fx, { k: 'spark', x, y, a, l: R(fx, len * 0.5, len), c: color, life: 10, max: 10, sp: R(fx, 4, 9) });
   }
@@ -45,7 +51,7 @@ export function ring(fx, x, y, color, r0 = 10, r1 = 70, life = 16, width = 5) {
 }
 
 export function puff(fx, x, y, n = 4, color = INK, size = 40) {
-  for (let i = 0; i < n; i++) {
+  for (let i = 0, c = count(fx, n); i < c; i++) {
     push(fx, { k: 'puff', x: x + R(fx, -15, 15), y: y + R(fx, -8, 4), vx: R(fx, -1.5, 1.5), vy: R(fx, -1.5, -0.2), s: size * R(fx, 0.6, 1.1), c: color, life: R(fx, 24, 40), max: 40 });
   }
 }
@@ -62,39 +68,39 @@ export function decal(fx, kind, x, y, extra = {}) {
 }
 
 export function speedLines(fx, x, y, color = INK, n = 14) {
-  for (let i = 0; i < n; i++) {
+  for (let i = 0, c = count(fx, n); i < c; i++) {
     const a = R(fx, 0, Math.PI * 2);
     push(fx, { k: 'speed', x, y, a, d: R(fx, 50, 90), l: R(fx, 40, 120), c: color, life: 10, max: 10 });
   }
 }
 
 export function feathers(fx, x, y, n = 10, color = '#c1121f') {
-  for (let i = 0; i < n; i++) {
+  for (let i = 0, c = count(fx, n); i < c; i++) {
     push(fx, { k: 'feather', x, y, vx: R(fx, -5, 5), vy: R(fx, -9, -2), rot: R(fx, 0, 6), vr: R(fx, -0.2, 0.2), c: i % 3 ? color : '#fdf0d5', life: R(fx, 60, 110), max: 110, g: 0.12 });
   }
 }
 
 export function petals(fx, x, y, n = 8, color = '#ff8fab') {
-  for (let i = 0; i < n; i++) {
+  for (let i = 0, c = count(fx, n); i < c; i++) {
     push(fx, { k: 'petal', x: x + R(fx, -40, 40), y: y + R(fx, -40, 20), vx: R(fx, -2, 2), vy: R(fx, -3, 0), rot: R(fx, 0, 6), vr: R(fx, -0.15, 0.15), c: color, life: R(fx, 50, 90), max: 90, g: 0.05 });
   }
 }
 
 export function stars(fx, x, y, n = 6, color = GOLD) {
-  for (let i = 0; i < n; i++) {
+  for (let i = 0, c = count(fx, n); i < c; i++) {
     const a = R(fx, 0, Math.PI * 2);
     push(fx, { k: 'star', x, y, vx: Math.cos(a) * R(fx, 2, 7), vy: Math.sin(a) * R(fx, 2, 7) - 2, c: color, life: R(fx, 20, 40), max: 40, r: R(fx, 4, 9), g: 0.15 });
   }
 }
 
 export function liquid(fx, x, y, n, color, dirX = 1, speed = 7) {
-  for (let i = 0; i < n; i++) {
+  for (let i = 0, c = count(fx, n); i < c; i++) {
     push(fx, { k: 'drop', x, y, vx: dirX * R(fx, speed * 0.5, speed) + R(fx, -1, 1), vy: R(fx, -6, -1), r: R(fx, 2, 5), c: color, life: R(fx, 25, 45), max: 45, g: 0.4 });
   }
 }
 
 export function flames(fx, x, y, n = 8, color = '#ff7b00') {
-  for (let i = 0; i < n; i++) {
+  for (let i = 0, c = count(fx, n); i < c; i++) {
     push(fx, { k: 'flame', x: x + R(fx, -20, 20), y, vx: R(fx, -1, 1), vy: R(fx, -4, -1.5), r: R(fx, 6, 14), c: i % 2 ? color : '#ffd166', life: R(fx, 16, 30), max: 30 });
   }
 }

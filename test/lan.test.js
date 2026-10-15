@@ -75,6 +75,7 @@ describe('LAN lobby and match', { timeout: 30000 }, () => {
     assert.equal(roomA.code.length, 4);
     assert.equal(roomA.you.seat, 0);
     assert.equal(roomA.host, true);
+    assert.equal(roomA.transitions, true, 'stage transitions default on');
 
     b.send({ t: 'list' });
     const list = await b.wait((m) => m.t === 'rooms');
@@ -89,9 +90,17 @@ describe('LAN lobby and match', { timeout: 30000 }, () => {
     b.send({ t: 'pick', charId: 'moolan', build: { charId: 'moolan' } });
     await a.wait((m) => m.t === 'room' && m.seats[0]?.charId === 'jidao');
 
+    // the host switches stage transitions off; a non-boolean value is ignored
+    a.send({ t: 'stage', stageId: 'barnyard', events: 'off', transitions: false });
+    await a.wait((m) => m.t === 'room' && m.transitions === false && m.stageId === 'barnyard');
+    a.send({ t: 'stage', stageId: 'barnyard', events: 'off', transitions: 'yes please' });
+    await a.wait((m) => m.t === 'room' && m.transitions === false);
+
     a.send({ t: 'ready', on: true });
     b.send({ t: 'ready', on: true });
     const startA = await a.wait((m) => m.t === 'start');
+    assert.equal(startA.cfg.transitions, false);
+    assert.equal(startA.cfg.stageId, 'barnyard');
     const startB = await b.wait((m) => m.t === 'start');
     assert.equal(startA.seat, 0);
     assert.equal(startB.seat, 1);

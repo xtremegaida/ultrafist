@@ -18,6 +18,7 @@ export function createLocalSession(cfg) {
     timer: cfg.timer,
     wins: cfg.wins,
     training: cfg.training,
+    transitions: cfg.transitions,
   });
   const seats = cfg.seats.map((seat, side) => ({
     ...seat,

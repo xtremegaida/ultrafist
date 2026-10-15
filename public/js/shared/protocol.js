@@ -10,7 +10,7 @@ export const C = {
   CREATE: 'create',   // { name? }
   JOIN: 'join',       // { code, role: 'p' | 's' }
   PICK: 'pick',       // { charId, build }
-  STAGE: 'stage',     // { stageId }            (host only)
+  STAGE: 'stage',     // { stageId, events, transitions }  (host only)
   READY: 'ready',     // { on: bool }
   INPUT: 'i',         // { f, b }               one per client frame
   REMATCH: 'rematch', // {}
